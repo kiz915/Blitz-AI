@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BizPilot AI - Datastores Stack
+  Provisions DynamoDB tables for Customers, Orders, and Tasks, plus S3 for business documents.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment stage (dev/staging/prod)
+
+Resources:
+  CustomersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BizPilot-Customers-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: customer_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: customer_id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Application
+          Value: BizPilotAI
+        - Key: Environment
+          Value: !Ref Environment
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BizPilot-Orders-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: order_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: order_date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: order_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: order_date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Application
+          Value: BizPilotAI
+        - Key: Environment
+          Value: !Ref Environment
+
+  TasksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "BizPilot-Tasks-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: task_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: priority
+          AttributeType: S
+      KeySchema:
+        - AttributeName: task_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: priority
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Application
+          Value: BizPilotAI
+        - Key: Environment
+          Value: !Ref Environment
+
+  BusinessDocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "bizpilot-docs-${AWS::AccountId}-${AWS::Region}-${Environment}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Application
+          Value: BizPilotAI
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  CustomersTableName:
+    Description: Customers DynamoDB Table Name
+    Value: !Ref CustomersTable
+
+  CustomersTableArn:
+    Description: Customers DynamoDB Table ARN
+    Value: !GetAtt CustomersTable.Arn
+
+  OrdersTableName:
+    Description: Orders DynamoDB Table Name
+    Value: !Ref OrdersTable
+
+  OrdersTableArn:
+    Description: Orders DynamoDB Table ARN
+    Value: !GetAtt OrdersTable.Arn
+
+  TasksTableName:
+    Description: Tasks DynamoDB Table Name
+    Value: !Ref TasksTable
+
+  TasksTableArn:
+    Description: Tasks DynamoDB Table ARN
+    Value: !GetAtt TasksTable.Arn
+
+  BusinessDocumentsBucketName:
+    Description: S3 Bucket Name for Business Documents & SOPs
+    Value: !Ref BusinessDocumentsBucket
+
+  BusinessDocumentsBucketArn:
+    Description: S3 Bucket ARN for Business Documents & SOPs
+    Value: !GetAtt BusinessDocumentsBucket.Arn

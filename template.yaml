@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BizPilot AI — Intelligent Operations Agent for Small Businesses
+  Serverless AWS architecture powered by Amazon Bedrock Agent, AWS Lambda, Amazon DynamoDB, and Amazon S3.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment stage name (e.g., dev, staging, prod)
+
+  FoundationModel:
+    Type: String
+    Default: "anthropic.claude-3-sonnet-20240229-v1:0"
+    Description: Bedrock foundation model ID (e.g. anthropic.claude-3-sonnet-20240229-v1:0 or anthropic.claude-3-haiku-20240307-v1:0)
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 256
+    Tracing: Active
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        POWERTOOLS_METRICS_NAMESPACE: BizPilotAI
+        POWERTOOLS_SERVICE_NAME: bizpilot-ai
+
+Resources:
+  # 1. Lambda Layers (Data Model & Powertools)
+  LambdaLayers:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: layers/layers.yaml
+
+  # 2. DynamoDB Datastores (Customers, Orders, Tasks) & S3 Document Store
+  Datastores:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: datastores/template.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  # 3. Amazon Bedrock Agent & Action Group Lambda Executor
+  Agent:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: agent/template.yaml
+      Parameters:
+        Environment: !Ref Environment
+        FoundationModel: !Ref FoundationModel
+        ModelLayer: !GetAtt LambdaLayers.Outputs.ModelLayer
+        PowertoolsLayer: !GetAtt LambdaLayers.Outputs.PowertoolsLayer
+        CustomersTableName: !GetAtt Datastores.Outputs.CustomersTableName
+        CustomersTableArn: !GetAtt Datastores.Outputs.CustomersTableArn
+        OrdersTableName: !GetAtt Datastores.Outputs.OrdersTableName
+        OrdersTableArn: !GetAtt Datastores.Outputs.OrdersTableArn
+        TasksTableName: !GetAtt Datastores.Outputs.TasksTableName
+        TasksTableArn: !GetAtt Datastores.Outputs.TasksTableArn
+
+  # 4. Sample Data Custom Resource (DynamoDB seeder & S3 SOP document loader)
+  SampleData:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: sample_data/template.yaml
+      Parameters:
+        Environment: !Ref Environment
+        CustomersTableName: !GetAtt Datastores.Outputs.CustomersTableName
+        CustomersTableArn: !GetAtt Datastores.Outputs.CustomersTableArn
+        OrdersTableName: !GetAtt Datastores.Outputs.OrdersTableName
+        OrdersTableArn: !GetAtt Datastores.Outputs.OrdersTableArn
+        TasksTableName: !GetAtt Datastores.Outputs.TasksTableName
+        TasksTableArn: !GetAtt Datastores.Outputs.TasksTableArn
+        BucketName: !GetAtt Datastores.Outputs.BusinessDocumentsBucketName
+        BucketArn: !GetAtt Datastores.Outputs.BusinessDocumentsBucketArn
+        ModelLayer: !GetAtt LambdaLayers.Outputs.ModelLayer
+        AgentId: !GetAtt Agent.Outputs.AgentId
+
+Outputs:
+  AgentId:
+    Description: Amazon Bedrock Agent ID
+    Value: !GetAtt Agent.Outputs.AgentId
+
+  AgentArn:
+    Description: Amazon Bedrock Agent ARN
+    Value: !GetAtt Agent.Outputs.AgentArn
+
+  AgentAliasId:
+    Description: Amazon Bedrock Agent Live Alias ID
+    Value: !GetAtt Agent.Outputs.AgentAliasId
+
+  CustomersTableName:
+    Description: Customers DynamoDB Table Name
+    Value: !GetAtt Datastores.Outputs.CustomersTableName
+
+  OrdersTableName:
+    Description: Orders DynamoDB Table Name
+    Value: !GetAtt Datastores.Outputs.OrdersTableName
+
+  TasksTableName:
+    Description: Tasks DynamoDB Table Name
+    Value: !GetAtt Datastores.Outputs.TasksTableName
+
+  BusinessDocumentsBucketName:
+    Description: S3 Bucket Name for Business Documents & SOPs
+    Value: !GetAtt Datastores.Outputs.BusinessDocumentsBucketName
+
+  OperationsFunctionArn:
+    Description: Bedrock Action Group Lambda Function ARN
+    Value: !GetAtt Agent.Outputs.OperationsFunctionArn

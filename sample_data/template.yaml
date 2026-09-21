@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BizPilot AI - Sample Data & Seeding Stack
+  Populates DynamoDB tables with demo small-business customers, orders, tasks, and uploads SOPs.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+
+  CustomersTableName:
+    Type: String
+
+  CustomersTableArn:
+    Type: String
+
+  OrdersTableName:
+    Type: String
+
+  OrdersTableArn:
+    Type: String
+
+  TasksTableName:
+    Type: String
+
+  TasksTableArn:
+    Type: String
+
+  BucketName:
+    Type: String
+
+  BucketArn:
+    Type: String
+
+  ModelLayer:
+    Type: String
+
+  AgentId:
+    Type: String
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 256
+    Tracing: Active
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+
+Resources:
+  DeploySampleDataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BizPilot-DeploySampleDataRole-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !Ref CustomersTableArn
+                  - !Ref OrdersTableArn
+                  - !Ref TasksTableArn
+        - PolicyName: S3BucketAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Ref BucketArn
+                  - !Sub "${BucketArn}/*"
+        - PolicyName: BedrockAgentPrepareAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:PrepareAgent
+                  - bedrock:GetAgent
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${AgentId}"
+
+  SampleDataDeployerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "BizPilot-SampleDataSeeder-${Environment}"
+      Description: CloudFormation Custom Resource to seed demo data and prepare Bedrock Agent
+      Handler: app.lambda_handler
+      Role: !GetAtt DeploySampleDataRole.Arn
+      Layers:
+        - !Ref ModelLayer
+      CodeUri: functions/sample_data_deployment/
+      Environment:
+        Variables:
+          CUSTOMERS_TABLE: !Ref CustomersTableName
+          ORDERS_TABLE: !Ref OrdersTableName
+          TASKS_TABLE: !Ref TasksTableName
+
+  SampleData:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceTimeout: 90
+      ServiceToken: !GetAtt SampleDataDeployerFunction.Arn
+      customers_table: !Ref CustomersTableName
+      orders_table: !Ref OrdersTableName
+      tasks_table: !Ref TasksTableName
+      s3_bucket: !Ref BucketName
+      agent_id: !Ref AgentId
+
+Outputs:
+  SeederFunctionArn:
+    Description: ARN of the Sample Data Seeder Function
+    Value: !GetAtt SampleDataDeployerFunction.Arn
