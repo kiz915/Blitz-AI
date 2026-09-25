@@ -1,0 +1,279 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BizPilot AI - Amazon Bedrock Agent Stack
+  Provisions the Bedrock Agent, Operations Action Group, IAM Roles, and Lambda Tool Executor.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment stage (dev/staging/prod)
+
+  FoundationModel:
+    Type: String
+    Default: "anthropic.claude-3-sonnet-20240229-v1:0"
+    Description: Bedrock Foundation Model ID for the Agent
+
+  ModelLayer:
+    Type: String
+    Description: ARN of the BizPilot Data Model Lambda Layer
+
+  PowertoolsLayer:
+    Type: String
+    Description: ARN of the AWS Lambda Powertools Layer
+
+  CustomersTableName:
+    Type: String
+    Description: Name of the Customers DynamoDB table
+
+  CustomersTableArn:
+    Type: String
+    Description: ARN of the Customers DynamoDB table
+
+  OrdersTableName:
+    Type: String
+    Description: Name of the Orders DynamoDB table
+
+  OrdersTableArn:
+    Type: String
+    Description: ARN of the Orders DynamoDB table
+
+  TasksTableName:
+    Type: String
+    Description: Name of the Tasks DynamoDB table
+
+  TasksTableArn:
+    Type: String
+    Description: ARN of the Tasks DynamoDB table
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 256
+    Tracing: Active
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        POWERTOOLS_METRICS_NAMESPACE: BizPilotAI
+        POWERTOOLS_SERVICE_NAME: bizpilot-operations
+
+Resources:
+  # ==========================================
+  # LAMBDA TOOL EXECUTOR
+  # ==========================================
+  BizPilotOperationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "BizPilot-Operations-Handler-${Environment}"
+      Description: Lambda function handling Bedrock Agent action group tools for BizPilot AI
+      CodeUri: functions/operations/
+      Handler: app.lambda_handler
+      Role: !GetAtt AgentFunctionsRole.Arn
+      Layers:
+        - !Ref ModelLayer
+        - !Ref PowertoolsLayer
+      Environment:
+        Variables:
+          CUSTOMERS_TABLE: !Ref CustomersTableName
+          ORDERS_TABLE: !Ref OrdersTableName
+          TASKS_TABLE: !Ref TasksTableName
+
+  BizPilotOperationsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt BizPilotOperationsFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+
+  # ==========================================
+  # IAM ROLES (LEAST PRIVILEGE)
+  # ==========================================
+  AgentFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BizPilot-Lambda-Role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: DynamoDBLeastPrivilegeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !Ref CustomersTableArn
+                  - !Ref OrdersTableArn
+                  - !Sub "${OrdersTableArn}/index/*"
+                  - !Ref TasksTableArn
+                  - !Sub "${TasksTableArn}/index/*"
+
+  AmazonBedrockExecutionRoleForAgents:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BizPilot-BedrockAgentRole-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Description: Execution role for BizPilot AI Bedrock Agent
+      Policies:
+        - PolicyName: InvokeOperationsHandler
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt BizPilotOperationsFunction.Arn
+        - PolicyName: BedrockFoundationModelAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+
+  # ==========================================
+  # AMAZON BEDROCK AGENT
+  # ==========================================
+  Agent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: !Sub "BizPilotAI-${Environment}"
+      AgentResourceRoleArn: !GetAtt AmazonBedrockExecutionRoleForAgents.Arn
+      Description: "BizPilot AI — Intelligent Operations Agent for Small Businesses"
+      IdleSessionTTLInSeconds: 900
+      FoundationModel: !Ref FoundationModel
+      Instruction: |
+        You are BizPilot AI, an elite AI operations assistant built specifically for small businesses and e-commerce merchants.
+        Your mission is to help business owners manage customer relationships, track and search orders, resolve order delays proactively, create and complete follow-up tasks, and provide high-level operational summaries.
+
+        CORE BEHAVIOR & RULES:
+        1. Always understand the user's intent and identify whether data retrieval or modification is needed.
+        2. Never invent, hallucinate, or assume order IDs, amounts, customer records, or task statuses. Only use data returned by your tools.
+        3. If an order, customer, or task is not found, clearly state that the requested data does not exist in the system.
+        4. When a user asks about delayed orders (e.g. "Show me delayed orders" or "What orders are delayed?"), call search_orders with status="delayed".
+        5. When a user asks about a specific order (e.g. "What's happening with ORD-1003?"), call get_order with order_id="ORD-1003". Formulate an empathetic, professional response including the customer name, product, status, and expected delivery date.
+        6. When asked to create a follow-up task (e.g. "Create a high priority follow-up for the customer of ORD-1003"), call create_followup_task. Confirm the created task ID, priority, and assigned details.
+        7. When asked for pending tasks or what needs to be done, call list_pending_tasks.
+        8. When asked to mark a task completed, call complete_task with the task ID and confirm completion.
+        9. When asked for a business summary or overview of issues (e.g. "Give me a summary of today's business issues"), call get_business_summary and provide a concise, high-value executive summary.
+        10. Maintain a professional, crisp, and helpful tone.
+      ActionGroups:
+        - ActionGroupName: BizPilotOperationsTools
+          Description: "Suite of operational tools for managing orders, customers, follow-up tasks, and business summaries"
+          ActionGroupExecutor:
+            Lambda: !GetAtt BizPilotOperationsFunction.Arn
+          ActionGroupState: ENABLED
+          FunctionSchema:
+            Functions:
+              - Name: get_order
+                Description: "Retrieve complete details of a customer order by order ID, including customer contact, product, amount, status, and delivery date"
+                Parameters:
+                  order_id:
+                    Description: "The unique identifier of the order (e.g., ORD-1003)"
+                    Required: true
+                    Type: string
+
+              - Name: get_customer
+                Description: "Retrieve customer contact details and associated order history by customer ID"
+                Parameters:
+                  customer_id:
+                    Description: "The unique identifier of the customer (e.g., CUST-001)"
+                    Required: true
+                    Type: string
+
+              - Name: search_orders
+                Description: "Search and filter customer orders by their operational status (e.g. delayed, pending, processing, shipped, delivered, cancelled)"
+                Parameters:
+                  status:
+                    Description: "The order status to filter by (pending, processing, shipped, delivered, delayed, cancelled)"
+                    Required: true
+                    Type: string
+
+              - Name: create_followup_task
+                Description: "Create a new operational follow-up task for a customer or order with a specified priority and description"
+                Parameters:
+                  customer_id:
+                    Description: "The customer ID to associate with the task (e.g., CUST-001)"
+                    Required: false
+                    Type: string
+                  order_id:
+                    Description: "The order ID to associate with the task (e.g., ORD-1003)"
+                    Required: false
+                    Type: string
+                  description:
+                    Description: "Detailed description of the follow-up task to be executed"
+                    Required: true
+                    Type: string
+                  priority:
+                    Description: "Task priority: high, medium, or low"
+                    Required: true
+                    Type: string
+
+              - Name: list_pending_tasks
+                Description: "List all pending follow-up tasks sorted by priority (high priority first) to identify urgent operational action items"
+                Parameters: {}
+
+              - Name: complete_task
+                Description: "Mark an existing follow-up task as completed by task ID"
+                Parameters:
+                  task_id:
+                    Description: "The unique identifier of the task to mark completed (e.g., TASK-001)"
+                    Required: true
+                    Type: string
+
+              - Name: get_business_summary
+                Description: "Retrieve an aggregated operational business overview including total orders, status breakdown, pending/delayed metrics, and active tasks"
+                Parameters: {}
+
+  AgentAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentAliasName: !Sub "BizPilotLive-${Environment}"
+      AgentId: !GetAtt Agent.AgentId
+      Description: !Sub "Production Live Alias for BizPilot AI Agent (${Environment})"
+
+Outputs:
+  AgentId:
+    Description: Amazon Bedrock Agent ID
+    Value: !Ref Agent
+
+  AgentArn:
+    Description: Amazon Bedrock Agent ARN
+    Value: !GetAtt Agent.AgentArn
+
+  AgentAliasId:
+    Description: Amazon Bedrock Agent Live Alias ID
+    Value: !GetAtt AgentAlias.AgentAliasId
+
+  OperationsFunctionArn:
+    Description: BizPilot Operations Lambda Function ARN
+    Value: !GetAtt BizPilotOperationsFunction.Arn
