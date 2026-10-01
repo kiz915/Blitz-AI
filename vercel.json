@@ -6,7 +6,8 @@
     },
     "api": {
       "root": "api",
-      "runtime": "python"
+      "runtime": "python",
+      "entrypoint": "index.py"
     }
   },
   "rewrites": [
