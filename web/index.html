@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BizPilot AI — Intelligent Operations Agent</title>
+  <meta name="description" content="AI operations copilot for small businesses powered by Amazon Bedrock, AWS Lambda, and Amazon DynamoDB.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon-wrapper">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">BizPilot AI</h1>
+          <p class="brand-tagline">Operations Agent</p>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" aria-label="Main Navigation">
+        <button class="nav-tab active" id="tab-nav-assistant" data-tab="assistant">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          Assistant
+        </button>
+        <button class="nav-tab" id="tab-nav-orders" data-tab="orders">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          Orders
+          <span class="tab-badge warning" id="badge-delayed-orders" style="display:none;">0</span>
+        </button>
+        <button class="nav-tab" id="tab-nav-customers" data-tab="customers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Customers
+        </button>
+        <button class="nav-tab" id="tab-nav-tasks" data-tab="tasks">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Tasks
+          <span class="tab-badge" id="badge-pending-tasks" style="display:none;">0</span>
+        </button>
+        <button class="nav-tab" id="tab-nav-overview" data-tab="overview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+          Overview
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="cloud-status-pill" id="cloud-status" title="Backend Connection Status">
+          <span class="status-dot online"></span>
+          <span class="status-label" id="cloud-status-text">Bedrock Live</span>
+        </div>
+        <button class="btn-refresh" id="btn-refresh-data" title="Refresh Live Data">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+
+      <!-- SECTION 1: AI ASSISTANT -->
+      <section class="tab-content active" id="section-assistant">
+        <div class="assistant-container">
+          <div class="demo-prompt-bar">
+            <span class="prompt-bar-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              Suggested Prompts
+            </span>
+            <div class="prompt-chips">
+              <button class="prompt-chip" data-prompt="Show me all delayed orders.">"Show me all delayed orders"</button>
+              <button class="prompt-chip" data-prompt="What's happening with ORD-1003?">"Check ORD-1003"</button>
+              <button class="prompt-chip" data-prompt="Create a high priority follow-up for the customer of ORD-1003.">"Follow up on ORD-1003"</button>
+              <button class="prompt-chip" data-prompt="What tasks are still pending?">"Pending tasks"</button>
+              <button class="prompt-chip" data-prompt="Give me a summary of today's business issues.">"Today's summary"</button>
+            </div>
+          </div>
+
+          <div class="chat-viewport" id="chat-viewport">
+            <div class="chat-message assistant">
+              <div class="message-avatar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              </div>
+              <div class="message-content">
+                <div class="message-sender">BizPilot AI <span class="agent-tag">Claude 3 Sonnet</span></div>
+                <div class="message-text">Hello! I'm <strong>BizPilot AI</strong>, your operations copilot. I'm connected to your DynamoDB tables via Amazon Bedrock.<br><br>I can track orders, alert you to delays, create follow-up tasks, and provide operational summaries. What would you like to review?</div>
+                <div class="message-meta">System Ready • DynamoDB Sync Active</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input-wrapper">
+            <form id="chat-form" class="chat-form">
+              <input type="text" id="chat-input" class="chat-input" placeholder="Ask BizPilot AI anything..." autocomplete="off" required />
+              <span class="shortcut-hint">Ctrl+K</span>
+              <button type="submit" id="btn-chat-send" class="btn-send" title="Send Request">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: ORDERS MANAGEMENT -->
+      <section class="tab-content" id="section-orders">
+        <div class="section-header-row">
+          <div>
+            <h2 class="section-heading">Orders Management</h2>
+            <p class="section-subheading">Track customer fulfillments, transit milestones, and delay exceptions.</p>
+          </div>
+          <div class="filter-controls">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="order-search-input" placeholder="Search orders..." />
+            </div>
+            <div class="filter-pills" id="order-status-filters">
+              <button class="filter-pill active" data-status="all">All (<span id="count-orders-all">0</span>)</button>
+              <button class="filter-pill" data-status="delayed">Delayed (<span id="count-orders-delayed">0</span>)</button>
+              <button class="filter-pill" data-status="pending">Pending (<span id="count-orders-pending">0</span>)</button>
+              <button class="filter-pill" data-status="processing">Processing (<span id="count-orders-processing">0</span>)</button>
+              <button class="filter-pill" data-status="shipped">Shipped (<span id="count-orders-shipped">0</span>)</button>
+              <button class="filter-pill" data-status="delivered">Delivered (<span id="count-orders-delivered">0</span>)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table class="data-table" id="orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Expected Delivery</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="orders-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SECTION 3: CUSTOMERS DIRECTORY -->
+      <section class="tab-content" id="section-customers">
+        <div class="section-header-row">
+          <div>
+            <h2 class="section-heading">Customer Directory</h2>
+            <p class="section-subheading">Active client profiles, purchase history, and contact channels.</p>
+          </div>
+        </div>
+        <div class="cards-grid" id="customers-grid"></div>
+      </section>
+
+      <!-- SECTION 4: FOLLOW-UP TASKS -->
+      <section class="tab-content" id="section-tasks">
+        <div class="section-header-row">
+          <div>
+            <h2 class="section-heading">Follow-up Tasks</h2>
+            <p class="section-subheading">Operational action items generated by BizPilot AI or your team.</p>
+          </div>
+          <div class="filter-controls">
+            <button class="btn-primary" id="btn-open-new-task-modal">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Create Task
+            </button>
+          </div>
+        </div>
+
+        <div class="tasks-container">
+          <div class="filter-pills" style="margin-bottom: 0.5rem;">
+            <button class="filter-pill task-tab-btn active" data-task-filter="all">All Tasks</button>
+            <button class="filter-pill task-tab-btn" data-task-filter="pending">Pending Only</button>
+            <button class="filter-pill task-tab-btn" data-task-filter="high">High Priority</button>
+            <button class="filter-pill task-tab-btn" data-task-filter="completed">Completed</button>
+          </div>
+          <div class="task-list" id="tasks-list"></div>
+        </div>
+      </section>
+
+      <!-- SECTION 5: BUSINESS OVERVIEW -->
+      <section class="tab-content" id="section-overview">
+        <div class="section-header-row">
+          <div>
+            <h2 class="section-heading">Business Overview</h2>
+            <p class="section-subheading">Live operational health metrics and fulfillment velocity.</p>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Total Orders</span>
+              <svg class="metric-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+            </div>
+            <div class="metric-value counter-anim" id="metric-total-orders">0</div>
+            <div class="metric-trend positive">Active Pipeline</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Pending Orders</span>
+              <svg class="metric-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="metric-value counter-anim" id="metric-pending-orders">0</div>
+            <div class="metric-trend neutral">Awaiting shipment</div>
+          </div>
+
+          <div class="metric-card alert">
+            <div class="metric-header">
+              <span class="metric-title">Delayed Orders</span>
+              <svg class="metric-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <div class="metric-value warning-color counter-anim" id="metric-delayed-orders">0</div>
+            <div class="metric-trend negative">Requires attention</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Completed Tasks</span>
+              <svg class="metric-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+            <div class="metric-value counter-anim" id="metric-completed-tasks">0</div>
+            <div class="metric-trend positive">Follow-ups resolved</div>
+          </div>
+        </div>
+
+        <div class="overview-details-grid">
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3 class="panel-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                Immediate Attention
+              </h3>
+              <span class="badge-alert-count" id="overview-delayed-count">0 Delayed</span>
+            </div>
+            <div class="delayed-orders-list" id="overview-delayed-list"></div>
+          </div>
+
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3 class="panel-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Operations Activity
+              </h3>
+              <span class="panel-badge">Live Feed</span>
+            </div>
+            <div class="timeline" id="recent-activity-timeline">
+              <div class="timeline-item">
+                <div class="timeline-bullet warning"></div>
+                <div>
+                  <div class="timeline-title">Order ORD-1003 Delayed</div>
+                  <div class="timeline-detail">Wireless Keyboard (Priya Sharma). Delayed in transit.</div>
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-bullet alert"></div>
+                <div>
+                  <div class="timeline-title">High Priority Task Created</div>
+                  <div class="timeline-detail">Follow up with Priya regarding ORD-1003.</div>
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-bullet success"></div>
+                <div>
+                  <div class="timeline-title">Order ORD-1001 Delivered</div>
+                  <div class="timeline-detail">Office Chair delivered to Rajesh Patel.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Footer Brand / AWS -->
+      <footer class="aws-footer">
+        Powered by 
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.96 0C5.35 0 .01 5.35.01 12s5.34 12 11.95 12 11.95-5.35 11.95-12S18.57 0 11.96 0zm5.17 17.65c-.86.58-2.22.99-3.79.99-3.66 0-5.74-2.18-5.74-5.26 0-3.32 2.37-5.59 6.01-5.59 1.48 0 2.58.33 3.33.79l-.82 1.63c-.62-.35-1.44-.6-2.45-.6-2.16 0-3.64 1.17-3.64 3.48 0 2.14 1.25 3.37 3.41 3.37 1.13 0 2.1-.33 2.76-.75l.93 1.94z"></path></svg>
+        Amazon Bedrock &amp; DynamoDB
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Toasts Container -->
+  <div id="toast-container"></div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="task-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Follow-up Task</h3>
+        <button class="btn-close-modal" id="btn-close-task-modal">&times;</button>
+      </div>
+      <form id="create-task-form">
+        <div class="form-group">
+          <label>Task Description</label>
+          <input type="text" id="task-input-desc" required placeholder="e.g. Call customer about delay" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Customer ID</label>
+            <input type="text" id="task-input-cust" placeholder="CUST-001" />
+          </div>
+          <div class="form-group">
+            <label>Order ID</label>
+            <input type="text" id="task-input-order" placeholder="ORD-1003" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="task-input-priority">
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" id="task-input-due" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-task-modal">Cancel</button>
+          <button type="submit" class="btn-primary">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
